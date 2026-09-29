@@ -39,3 +39,17 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Agent & AI Assistant Temporary Files
+.gemini/
+.antigravity/
+.temp/
+.tempmediaStorage/
+scratch/
+implementation_plan.md
+walkthrough.md
+task.md
+task_plan.md
+scratchpad_*.md
+*.temp.md
+
