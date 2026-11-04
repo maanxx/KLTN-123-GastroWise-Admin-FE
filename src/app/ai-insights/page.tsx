@@ -22,20 +22,24 @@ export default function AiInsightsPage() {
   const fetchMetrics = async () => {
     try {
       setLoading(true);
-      const [restRes, revRes] = await Promise.all([
+      const [restRes, revStatsRes, topFavRes] = await Promise.all([
         apiClient.get('/restaurants?limit=1').catch(() => ({ data: { total: 178 } })),
-        apiClient.get('/reviews').catch(() => ({ data: [] }))
+        apiClient.get('/reviews/stats').catch(() => ({ data: { totalReviews: 761, positivePercent: 80 } })),
+        apiClient.get('/favorites/top?limit=1').catch(() => ({ data: [] }))
       ]);
 
       const restTotal = restRes.data?.total || 178;
-      const revData = Array.isArray(revRes.data) ? revRes.data : [];
-      const totalRev = revData.length > 0 ? revData.length : 1450;
+      const totalRev = revStatsRes.data?.totalReviews || 761;
+      const posRate = revStatsRes.data?.positivePercent || 80;
+      const trending = (Array.isArray(topFavRes.data) && topFavRes.data[0]?.tenQuan) 
+        ? `${topFavRes.data[0].tenQuan} (Trending)` 
+        : 'Sườn Nướng BBQ & Lẩu Thái';
 
       setStats({
         totalRestaurants: restTotal,
         totalReviews: totalRev,
-        positiveRate: 89,
-        trendingFood: 'Sườn Nướng BBQ & Lẩu Thái',
+        positiveRate: posRate,
+        trendingFood: trending,
         revenueGrowth: '+28.4%',
       });
     } catch (error) {

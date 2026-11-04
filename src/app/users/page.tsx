@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, Edit, Trash2, Shield, Lock, Unlock, Users, Eye, CheckCircle2, X, Loader2, Heart, Award } from 'lucide-react';
+import { Search, Filter, Edit, Trash2, Shield, Lock, Unlock, Users, Eye, CheckCircle2, X, Loader2, Heart, Award, Download, UserCheck, UserX, ShieldCheck } from 'lucide-react';
 import { Button } from '@/shared/components/ui/Button';
 import { Badge } from '@/shared/components/ui/Badge';
 import { apiClient } from '@/shared/lib/axios';
@@ -27,12 +27,16 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
 
   // Pagination states
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
   const [totalUsers, setTotalUsers] = useState(0);
+  const [totalActive, setTotalActive] = useState(0);
+  const [totalBanned, setTotalBanned] = useState(0);
+  const [totalAdmins, setTotalAdmins] = useState(0);
 
   // Detail / Edit Modal
   const [selectedUser, setSelectedUser] = useState<UserItem | null>(null);
@@ -46,12 +50,18 @@ export default function UsersPage() {
     try {
       setLoading(true);
       const res = await apiClient.get('/users', {
-        params: { page, limit, search: searchQuery, role: roleFilter }
+        params: { page, limit, search: searchQuery, role: roleFilter, status: statusFilter !== 'all' ? statusFilter : undefined }
       });
       const data = res.data?.data || res.data || [];
       setUsers(Array.isArray(data) ? data : []);
       setTotalPages(res.data?.totalPages || 1);
-      setTotalUsers(res.data?.total || data.length || 0);
+      const total = res.data?.total || data.length || 0;
+      setTotalUsers(total);
+      // Tính stats từ data hiện tại
+      const allData: UserItem[] = Array.isArray(data) ? data : [];
+      setTotalActive(allData.filter(u => u.status === 'active').length);
+      setTotalBanned(allData.filter(u => u.status === 'banned').length);
+      setTotalAdmins(allData.filter(u => u.role === 'admin').length);
     } catch (error) {
       console.error('Lỗi khi tải danh sách người dùng:', error);
     } finally {
@@ -62,7 +72,7 @@ export default function UsersPage() {
   useEffect(() => {
     // Reset to page 1 when search or role changes
     setPage(1);
-  }, [searchQuery, roleFilter]);
+  }, [searchQuery, roleFilter, statusFilter]);
 
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
@@ -70,7 +80,7 @@ export default function UsersPage() {
     }, 500);
 
     return () => clearTimeout(delayDebounceFn);
-  }, [searchQuery, roleFilter, page, limit]);
+  }, [searchQuery, roleFilter, statusFilter, page, limit]);
 
   // Toggle Lock/Unlock Account
   const handleToggleStatus = async (user: UserItem) => {
@@ -119,6 +129,30 @@ export default function UsersPage() {
     }
   };
 
+  // Export CSV
+  const handleExportCSV = () => {
+    const headers = ['ID', 'Username', 'Email', 'Họ tên', 'Role', 'Trạng thái', 'Ngày tạo'];
+    const rows = users.map((u) => [
+      u._id || u.id || '',
+      u.username,
+      u.email,
+      `${u.firstName || ''} ${u.lastName || ''}`.trim(),
+      u.role,
+      u.status,
+      u.createdAt ? new Date(u.createdAt).toLocaleDateString('vi-VN') : '',
+    ]);
+    const csvContent = [headers, ...rows]
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `gastrowise-users-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const getRoleBadge = (role: string) => {
     switch (role) {
       case 'admin':
@@ -154,6 +188,32 @@ export default function UsersPage() {
           </h1>
           <p className="text-sm text-slate-500 mt-1">Kiểm soát phân quyền hệ thống (Admin/Owner/User), xem sở thích khẩu vị và khóa/mở khóa tài khoản.</p>
         </div>
+        <button
+          onClick={handleExportCSV}
+          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl shadow-sm transition-colors"
+        >
+          <Download className="w-4 h-4" /> Xuất CSV
+        </button>
+      </div>
+
+      {/* Quick Stats Bar */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: 'Tổng người dùng', value: totalUsers, icon: Users,      color: 'text-slate-700', bg: 'bg-slate-50',   border: 'border-slate-200'  },
+          { label: 'Đang hoạt động',  value: totalActive, icon: UserCheck,  color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200' },
+          { label: 'Bị khóa',         value: totalBanned, icon: UserX,      color: 'text-rose-700',  bg: 'bg-rose-50',    border: 'border-rose-200'   },
+          { label: 'Quản trị viên',   value: totalAdmins, icon: ShieldCheck, color: 'text-indigo-700', bg: 'bg-indigo-50', border: 'border-indigo-200' },
+        ].map((s) => (
+          <div key={s.label} className={`${s.bg} border ${s.border} rounded-2xl p-4 flex items-center gap-3`}>
+            <div className={`p-2.5 rounded-xl ${s.bg}`}>
+              <s.icon className={`w-5 h-5 ${s.color}`} />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-slate-500 uppercase">{s.label}</p>
+              <p className={`text-2xl font-extrabold ${s.color}`}>{loading ? '–' : s.value}</p>
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Filters Toolbar */}
@@ -180,6 +240,15 @@ export default function UsersPage() {
             <option value="user">Khách hàng (User)</option>
             <option value="owner">Chủ nhà hàng (Owner)</option>
             <option value="admin">Quản trị viên (Admin)</option>
+          </select>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+          >
+            <option value="all">Tất cả Trạng thái</option>
+            <option value="active">✅ Hoạt động</option>
+            <option value="banned">🔒 Bị khóa</option>
           </select>
         </div>
       </div>

@@ -1,7 +1,28 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Filter, Edit, Trash2, Eye, Star, Loader2, X, MapPin, Clock, Tag, Sparkles, ChevronLeft, ChevronRight, Wand2 } from 'lucide-react';
+import { 
+  Plus, 
+  Search, 
+  Filter, 
+  Edit, 
+  Trash2, 
+  Eye, 
+  Star, 
+  Loader2, 
+  X, 
+  MapPin, 
+  Clock, 
+  Tag, 
+  Sparkles, 
+  ChevronLeft, 
+  ChevronRight, 
+  Wand2,
+  ShieldCheck,
+  ShieldAlert,
+  Power,
+  CheckCircle2
+} from 'lucide-react';
 import { Button } from '@/shared/components/ui/Button';
 import { Badge } from '@/shared/components/ui/Badge';
 import { apiClient } from '@/shared/lib/axios';
@@ -18,6 +39,8 @@ interface RestaurantItem {
   avatarUrl?: string;
   urlGoc?: string;
   status?: string;
+  isVerified?: boolean;
+  isFeatured?: boolean;
   slug?: string;
   moTa?: string;
 }
@@ -26,7 +49,10 @@ export default function RestaurantsPage() {
   const [restaurants, setRestaurants] = useState<RestaurantItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [badgeFilter, setBadgeFilter] = useState<string>('all');
   const [selectedRestaurant, setSelectedRestaurant] = useState<RestaurantItem | null>(null);
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
   
   // Modals state
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
@@ -43,6 +69,9 @@ export default function RestaurantsPage() {
     giaCa: '30.000đ - 100.000đ',
     tags: 'Món Việt, Quán ăn gia đình',
     moTa: '',
+    status: 'open',
+    isVerified: false,
+    isFeatured: false,
   });
 
   // Pagination state
@@ -52,7 +81,7 @@ export default function RestaurantsPage() {
   const fetchRestaurants = async () => {
     setIsLoading(true);
     try {
-      const res = await apiClient.get('/restaurants?limit=100');
+      const res = await apiClient.get('/restaurants?limit=150');
       const data = res.data?.data || res.data || [];
       setRestaurants(data);
     } catch (error) {
@@ -66,14 +95,88 @@ export default function RestaurantsPage() {
     fetchRestaurants();
   }, []);
 
-  // Filter
+  // Quick Toggle Status (Open <-> Closed)
+  const handleToggleStatus = async (item: RestaurantItem) => {
+    const id = item._id || item.id || '';
+    const nextStatus = item.status === 'closed' ? 'open' : 'closed';
+    try {
+      setActionLoadingId(id);
+      await apiClient.patch(`/restaurants/${id}`, { status: nextStatus });
+      setRestaurants(prev => prev.map(r => ((r._id || r.id) === id ? { ...r, status: nextStatus } : r)));
+      if (selectedRestaurant && (selectedRestaurant._id || selectedRestaurant.id) === id) {
+        setSelectedRestaurant(prev => prev ? { ...prev, status: nextStatus } : null);
+      }
+    } catch (error) {
+      console.error('Lỗi cập nhật trạng thái hoạt động:', error);
+      alert('Không thể thay đổi trạng thái nhà hàng.');
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  // Quick Toggle Verified Badge (Quán uy tín)
+  const handleToggleVerified = async (item: RestaurantItem) => {
+    const id = item._id || item.id || '';
+    const nextVerified = !item.isVerified;
+    try {
+      setActionLoadingId(id);
+      await apiClient.patch(`/restaurants/${id}`, { isVerified: nextVerified });
+      setRestaurants(prev => prev.map(r => ((r._id || r.id) === id ? { ...r, isVerified: nextVerified } : r)));
+      if (selectedRestaurant && (selectedRestaurant._id || selectedRestaurant.id) === id) {
+        setSelectedRestaurant(prev => prev ? { ...prev, isVerified: nextVerified } : null);
+      }
+    } catch (error) {
+      console.error('Lỗi cập nhật nhãn Quán uy tín:', error);
+      alert('Không thể cập nhật nhãn Quán uy tín.');
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  // Quick Toggle AI Featured Badge (AI Đề xuất)
+  const handleToggleFeatured = async (item: RestaurantItem) => {
+    const id = item._id || item.id || '';
+    const nextFeatured = !item.isFeatured;
+    try {
+      setActionLoadingId(id);
+      await apiClient.patch(`/restaurants/${id}`, { isFeatured: nextFeatured });
+      setRestaurants(prev => prev.map(r => ((r._id || r.id) === id ? { ...r, isFeatured: nextFeatured } : r)));
+      if (selectedRestaurant && (selectedRestaurant._id || selectedRestaurant.id) === id) {
+        setSelectedRestaurant(prev => prev ? { ...prev, isFeatured: nextFeatured } : null);
+      }
+    } catch (error) {
+      console.error('Lỗi cập nhật nhãn AI Đề xuất:', error);
+      alert('Không thể cập nhật nhãn AI Đề xuất.');
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  // Filter logic
   const filteredRestaurants = restaurants.filter(r => {
     const term = searchTerm.toLowerCase();
-    return (
+    const matchSearch =
       (r.tenQuan && r.tenQuan.toLowerCase().includes(term)) ||
       (r.diaChi && r.diaChi.toLowerCase().includes(term)) ||
-      (r.tags && r.tags.toLowerCase().includes(term))
-    );
+      (r.tags && r.tags.toLowerCase().includes(term));
+
+    // Status Filter
+    let matchStatus = true;
+    if (statusFilter === 'open') {
+      matchStatus = r.status !== 'closed';
+    } else if (statusFilter === 'closed') {
+      matchStatus = r.status === 'closed';
+    }
+
+    // Badge Filter
+    let matchBadge = true;
+    if (badgeFilter === 'verified') {
+      matchBadge = Boolean(r.isVerified);
+    } else if (badgeFilter === 'featured') {
+      matchBadge = Boolean(r.isFeatured);
+    }
+
+    return matchSearch && matchStatus && matchBadge;
   });
 
   // Pagination math
@@ -105,6 +208,9 @@ export default function RestaurantsPage() {
       giaCa: item.giaCa || '',
       tags: item.tags || '',
       moTa: item.moTa || (item as any).description || '',
+      status: item.status || 'open',
+      isVerified: Boolean(item.isVerified),
+      isFeatured: Boolean(item.isFeatured),
     });
   };
 
@@ -118,6 +224,9 @@ export default function RestaurantsPage() {
       giaCa: '30.000đ - 100.000đ',
       tags: 'Món Việt, Quán gia đình',
       moTa: '',
+      status: 'open',
+      isVerified: false,
+      isFeatured: false,
     });
     setIsAddModalOpen(true);
   };
@@ -139,7 +248,6 @@ export default function RestaurantsPage() {
         await apiClient.post('/restaurants', {
           ...formData,
           diemTrungBinh: 5.0,
-          status: 'open',
         });
         alert('Thêm nhà hàng mới thành công!');
         setIsAddModalOpen(false);
@@ -158,7 +266,6 @@ export default function RestaurantsPage() {
     }
     setIsGeneratingAi(true);
     try {
-      // Giả lập hoặc gọi prompt AI hỗ trợ tạo mô tả
       setTimeout(() => {
         setFormData(prev => ({
           ...prev,
@@ -166,7 +273,7 @@ export default function RestaurantsPage() {
           moTa: `Nhà hàng ${prev.tenQuan} tọa lạc tại ${prev.diaChi || 'vị trí đắc địa'}, nổi tiếng với không gian thoáng đãng, thực đơn phong phú cùng phong cách phục vụ chu đáo. Đây là địa điểm lý tưởng cho các buổi họp mặt gia đình và bạn bè.`,
         }));
         setIsGeneratingAi(false);
-      }, 1200);
+      }, 1000);
     } catch (error) {
       setIsGeneratingAi(false);
     }
@@ -178,13 +285,13 @@ export default function RestaurantsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-5">
         <div>
           <h1 className="font-heading text-2xl font-bold text-slate-900 flex items-center gap-2">
-            CMS Quản Lý Nhà Hàng 
-            <span className="bg-primary-50 text-primary-700 text-xs px-2.5 py-1 rounded-full border border-primary-200">
-              CRUD & AI Assisted
+            CMS Quản Lý Nhà Hàng & Nhãn Đối Tác
+            <span className="bg-primary-50 text-primary-700 text-xs px-2.5 py-1 rounded-full border border-primary-200 font-semibold">
+              Trạng thái & AI Badges
             </span>
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Quản lý dữ liệu đối tác nhà hàng, hỗ trợ phân trang DataTable và AI Auto-Tagging chuẩn SEO.
+            Quản lý thông tin nhà hàng, gán nhãn Quán uy tín, nhãn AI Đề xuất và bật/tắt trạng thái hoạt động tức thì.
           </p>
         </div>
         <Button onClick={handleOpenAdd} icon={<Plus className="h-4 w-4" />}>
@@ -193,8 +300,8 @@ export default function RestaurantsPage() {
       </div>
 
       {/* Filters & DataTable Control */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row gap-4 justify-between items-center">
-        <div className="relative w-full sm:w-96">
+      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 justify-between items-center">
+        <div className="relative w-full md:w-80">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <input 
             type="text" 
@@ -208,17 +315,53 @@ export default function RestaurantsPage() {
           />
         </div>
         
-        <div className="text-xs font-semibold text-slate-500">
-          Hiển thị <strong className="text-slate-900">{paginatedData.length}</strong> / tổng {filteredRestaurants.length} kết quả (Trang {currentPage}/{totalPages})
+        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+          {/* Status Filter */}
+          <div className="flex items-center gap-2">
+            <Power className="h-4 w-4 text-slate-400" />
+            <select
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+            >
+              <option value="all">Tất cả Trạng thái</option>
+              <option value="open">🟢 Đang mở cửa</option>
+              <option value="closed">🔴 Tạm đóng</option>
+            </select>
+          </div>
+
+          {/* Badge Filter */}
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-slate-400" />
+            <select
+              value={badgeFilter}
+              onChange={(e) => {
+                setBadgeFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+            >
+              <option value="all">Tất cả Nhãn đối tác</option>
+              <option value="verified">🛡️ Quán uy tín</option>
+              <option value="featured">✨ AI Đề xuất</option>
+            </select>
+          </div>
+
+          <div className="text-xs font-semibold text-slate-500 hidden xl:block">
+            {paginatedData.length} / {filteredRestaurants.length} quán
+          </div>
         </div>
       </div>
 
       {/* Data Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         {isLoading ? (
-          <div className="flex flex-col items-center justify-center py-16 text-slate-400">
+          <div className="flex flex-col items-center justify-center py-20 text-slate-400">
             <Loader2 className="h-8 w-8 animate-spin text-primary-500 mb-2" />
-            <span className="text-sm font-medium">Đang tải dữ liệu nhà hàng...</span>
+            <span className="text-sm font-medium">Đang tải danh sách nhà hàng từ hệ thống...</span>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -226,10 +369,10 @@ export default function RestaurantsPage() {
               <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold uppercase text-xs tracking-wider">
                 <tr>
                   <th className="px-6 py-4">Nhà hàng & Địa chỉ</th>
-                  <th className="px-6 py-4">Thẻ tags AI</th>
+                  <th className="px-6 py-4">Nhãn & Thẻ Tags</th>
                   <th className="px-6 py-4">Đánh giá</th>
                   <th className="px-6 py-4">Giờ mở & Giá</th>
-                  <th className="px-6 py-4">Trạng thái</th>
+                  <th className="px-6 py-4">Trạng thái & Nhãn nhanh</th>
                   <th className="px-6 py-4 text-right">Thao tác CRUD</th>
                 </tr>
               </thead>
@@ -237,47 +380,121 @@ export default function RestaurantsPage() {
                 {paginatedData.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="text-center py-12 text-slate-400">
-                      Không tìm thấy nhà hàng nào phù hợp với từ khóa.
+                      Không tìm thấy nhà hàng nào phù hợp với bộ lọc tìm kiếm.
                     </td>
                   </tr>
                 ) : (
                   paginatedData.map((row) => {
                     const rowId = row._id || row.id || '';
+                    const isOpen = row.status !== 'closed';
+                    const isVerified = Boolean(row.isVerified);
+                    const isFeatured = Boolean(row.isFeatured);
+                    const isRowBusy = actionLoadingId === rowId;
+
                     return (
                       <tr key={rowId} className="hover:bg-slate-50/70 transition-colors">
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 shrink-0 rounded-xl bg-slate-100 overflow-hidden border border-slate-200">
+                            <div className="h-11 w-11 shrink-0 rounded-xl bg-slate-100 overflow-hidden border border-slate-200 relative">
                               <img
                                 src={row.avatarUrl || `https://picsum.photos/seed/${rowId}/100/100`}
                                 alt={row.tenQuan}
                                 className="h-full w-full object-cover"
                               />
+                              {isFeatured && (
+                                <span className="absolute top-0.5 right-0.5 w-2.5 h-2.5 rounded-full bg-purple-500 ring-2 ring-white" title="AI Đề xuất" />
+                              )}
                             </div>
                             <div>
-                              <div className="font-bold text-slate-900 line-clamp-1">{row.tenQuan}</div>
+                              <div className="font-bold text-slate-900 line-clamp-1 flex items-center gap-1.5">
+                                {row.tenQuan}
+                                {isVerified && (
+                                  <span title="Quán uy tín đã xác thực"><ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" /></span>
+                                )}
+                              </div>
                               <div className="text-xs text-slate-500 line-clamp-1 mt-0.5">{row.diaChi}</div>
                             </div>
                           </div>
                         </td>
+
                         <td className="px-6 py-4">
-                          <span className="bg-primary-50 text-primary-700 border border-primary-200/60 px-2.5 py-1 rounded-md text-xs font-semibold">
-                            {row.tags || 'Món Việt'}
-                          </span>
+                          <div className="flex flex-wrap gap-1.5 items-center">
+                            {isVerified && (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                                <ShieldCheck className="w-3 h-3 text-emerald-600" /> Uy tín
+                              </span>
+                            )}
+                            {isFeatured && (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-purple-800 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-md">
+                                <Sparkles className="w-3 h-3 text-purple-600" /> AI Đề xuất
+                              </span>
+                            )}
+                            <span className="bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-md text-xs font-medium">
+                              {row.tags || 'Món Việt'}
+                            </span>
+                          </div>
                         </td>
+
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-1 font-bold text-amber-600">
                             <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
                             {row.diemTrungBinh ? Number(row.diemTrungBinh).toFixed(1) : '5.0'}
                           </div>
                         </td>
+
                         <td className="px-6 py-4 font-semibold text-slate-700 text-xs">
                           <div>{row.gioMoCua || '08:00 - 22:00'}</div>
                           <div className="text-slate-400 text-[11px] font-normal">{row.giaCa || '30k - 100k'}</div>
                         </td>
+
+                        {/* Status & Quick Toggle Strip */}
                         <td className="px-6 py-4">
-                          <Badge variant="success">Hoạt động</Badge>
+                          <div className="flex items-center gap-1.5">
+                            {/* Toggle Open/Closed */}
+                            <button
+                              onClick={() => handleToggleStatus(row)}
+                              disabled={isRowBusy}
+                              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border transition-all ${
+                                isOpen 
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' 
+                                  : 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
+                              }`}
+                              title="Bấm để bật/tắt trạng thái Mở/Đóng cửa"
+                            >
+                              <span className={`w-2 h-2 rounded-full ${isOpen ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                              {isOpen ? 'Mở cửa' : 'Tạm đóng'}
+                            </button>
+
+                            {/* Quick Toggle Verified */}
+                            <button
+                              onClick={() => handleToggleVerified(row)}
+                              disabled={isRowBusy}
+                              className={`p-1.5 rounded-lg border transition-all ${
+                                isVerified
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100'
+                                  : 'bg-slate-50 text-slate-400 border-slate-200 hover:text-emerald-600 hover:border-emerald-200'
+                              }`}
+                              title={isVerified ? 'Bỏ nhãn Quán uy tín' : 'Gán nhãn Quán uy tín'}
+                            >
+                              <ShieldCheck className="w-3.5 h-3.5" />
+                            </button>
+
+                            {/* Quick Toggle AI Featured */}
+                            <button
+                              onClick={() => handleToggleFeatured(row)}
+                              disabled={isRowBusy}
+                              className={`p-1.5 rounded-lg border transition-all ${
+                                isFeatured
+                                  ? 'bg-purple-50 text-purple-700 border-purple-300 hover:bg-purple-100'
+                                  : 'bg-slate-50 text-slate-400 border-slate-200 hover:text-purple-600 hover:border-purple-200'
+                              }`}
+                              title={isFeatured ? 'Bỏ nhãn AI Đề xuất' : 'Gán nhãn Được AI Đề xuất'}
+                            >
+                              <Sparkles className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </td>
+
                         <td className="px-6 py-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
                             <button
@@ -347,9 +564,34 @@ export default function RestaurantsPage() {
               <X className="h-5 w-5" />
             </button>
 
-            <h3 className="font-heading text-xl font-extrabold text-slate-900 mb-4 pr-6">
-              {selectedRestaurant.tenQuan}
-            </h3>
+            <div className="flex items-center gap-2 mb-2 pr-6">
+              <h3 className="font-heading text-xl font-extrabold text-slate-900">
+                {selectedRestaurant.tenQuan}
+              </h3>
+            </div>
+
+            {/* Badges in modal */}
+            <div className="flex flex-wrap gap-2 mb-4">
+              <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                selectedRestaurant.status !== 'closed'
+                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                  : 'bg-rose-50 text-rose-700 border border-rose-200'
+              }`}>
+                {selectedRestaurant.status !== 'closed' ? '🟢 Đang mở cửa' : '🔴 Tạm đóng'}
+              </span>
+
+              {selectedRestaurant.isVerified && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" /> Quán uy tín đã xác thực
+                </span>
+              )}
+
+              {selectedRestaurant.isFeatured && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-50 text-purple-800 border border-purple-200">
+                  <Sparkles className="w-3.5 h-3.5 text-purple-600" /> Được AI Đề xuất
+                </span>
+              )}
+            </div>
 
             <div className="h-44 w-full rounded-2xl overflow-hidden mb-4 border border-slate-200">
               <img
@@ -384,7 +626,16 @@ export default function RestaurantsPage() {
               </div>
             </div>
 
-            <div className="mt-6 flex justify-end">
+            <div className="mt-6 flex justify-between items-center pt-3 border-t border-slate-100">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => handleToggleStatus(selectedRestaurant)}
+                className={selectedRestaurant.status === 'closed' ? 'text-emerald-700 border-emerald-300' : 'text-rose-700 border-rose-300'}
+              >
+                {selectedRestaurant.status === 'closed' ? 'Mở cửa lại quán' : 'Tạm đóng cửa quán'}
+              </Button>
+
               <Button onClick={() => setSelectedRestaurant(null)}>Đóng</Button>
             </div>
           </div>
@@ -394,7 +645,7 @@ export default function RestaurantsPage() {
       {/* Modal Form: Add or Edit Restaurant */}
       {(isAddModalOpen || editingRestaurant) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl relative">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => {
                 setIsAddModalOpen(false);
@@ -409,7 +660,7 @@ export default function RestaurantsPage() {
               {editingRestaurant ? 'Chỉnh Sửa Thông Tin Nhà Hàng' : 'Thêm Nhà Hàng Mới'}
             </h3>
             <p className="text-xs text-slate-500 mb-4">
-              Cập nhật thông tin chi tiết và sử dụng AI Trợ lý tự động sinh Tags/Mô tả.
+              Cập nhật thông tin chi tiết, trạng thái mở cửa và gắn nhãn AI / Uy tín.
             </p>
 
             <form onSubmit={handleSave} className="space-y-4">
@@ -458,6 +709,45 @@ export default function RestaurantsPage() {
                 </div>
               </div>
 
+              {/* Status and Badges Controls */}
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-700">Trạng thái hoạt động</label>
+                  <select
+                    value={formData.status}
+                    onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value }))}
+                    className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                  >
+                    <option value="open">🟢 Đang mở cửa</option>
+                    <option value="closed">🔴 Tạm đóng</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-slate-200/60">
+                  <span className="text-xs font-medium text-slate-700 flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" /> Quán ăn uy tín (isVerified)
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={formData.isVerified}
+                    onChange={(e) => setFormData(prev => ({ ...prev, isVerified: e.target.checked }))}
+                    className="w-4 h-4 rounded text-primary-600 focus:ring-primary-500 cursor-pointer"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-slate-200/60">
+                  <span className="text-xs font-medium text-slate-700 flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-purple-600" /> Được AI Đề xuất ưu tiên (isFeatured)
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={formData.isFeatured}
+                    onChange={(e) => setFormData(prev => ({ ...prev, isFeatured: e.target.checked }))}
+                    className="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 cursor-pointer"
+                  />
+                </div>
+              </div>
+
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-bold text-slate-700">Thẻ Tags (Phân loại)</label>
@@ -491,7 +781,7 @@ export default function RestaurantsPage() {
                 />
               </div>
 
-              <div className="mt-6 flex justify-end gap-3">
+              <div className="mt-6 flex justify-end gap-3 pt-2 border-t border-slate-100">
                 <Button 
                   variant="outline" 
                   type="button" 
@@ -513,4 +803,3 @@ export default function RestaurantsPage() {
     </div>
   );
 }
-

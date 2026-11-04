@@ -7,17 +7,15 @@ import {
   LayoutDashboard, 
   Users, 
   Utensils, 
-  MapPin, 
   LogOut,
   Bell,
   Search,
-  Settings,
   BookOpen,
   Sparkles,
   MessageSquare,
   ShieldAlert,
   ArrowLeft,
-  Lock
+  Route,
 } from 'lucide-react';
 
 import { AiCopilot } from '@/shared/components/ui/AiCopilot';
@@ -27,11 +25,10 @@ const sidebarMenus = [
   { name: 'Tổng quan (Dashboard)', href: '/', icon: LayoutDashboard },
   { name: 'Quản lý Nhà hàng', href: '/restaurants', icon: Utensils },
   { name: 'Quản lý Thực đơn', href: '/menu', icon: BookOpen },
-  { name: 'Quản lý Đặt bàn', href: '/bookings', icon: MapPin },
+  { name: 'Quản lý Lộ trình AI', href: '/itineraries', icon: Route, isAi: true },
   { name: 'Quản lý Đánh giá', href: '/reviews', icon: MessageSquare },
   { name: 'AI Trợ lý (Insights)', href: '/ai-insights', icon: Sparkles, isAi: true },
   { name: 'Quản lý Người dùng', href: '/users', icon: Users },
-  { name: 'Cài đặt', href: '/settings', icon: Settings },
 ];
 
 export function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -165,6 +162,9 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
                 </div>
                 {item.isAi && (
                   <span className="text-[10px] uppercase font-bold bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded animate-pulse">New</span>
+                )}
+                {(item as any).isNew && !item.isAi && (
+                  <span className="text-[10px] uppercase font-bold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">New</span>
                 )}
               </Link>
             );
